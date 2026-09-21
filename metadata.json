@@ -1,0 +1,6 @@
+{
+  "name": "DeFi Exchange",
+  "description": "Ultra-modern quant technology dashboard and institutional live trading bot for USD/JPY and EUR/USD featuring 30s, 1m, 5m, 10m candle charts, world-class 5-minute ICT Smart Money scalp and 10-minute institutional trend strategies, automated 'No Loss' Break-Even defense, DOM Depth of Market, and MT4/MT5 Webhook relay.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
