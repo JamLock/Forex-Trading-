@@ -28,6 +28,7 @@ import {
   Compass,
   Calendar,
   Sparkles,
+  Brain,
 } from "lucide-react";
 import {
   AccountStats,
@@ -63,6 +64,7 @@ interface ModernTechDashboardProps {
   packets: LiveBrokerPacket[];
   signals: AlgoSignal[];
   onSwitchToTerminal: () => void;
+  onSwitchToMasterAI?: () => void;
 }
 
 interface OrderBookLevel {
@@ -106,6 +108,7 @@ export const ModernTechDashboard: React.FC<ModernTechDashboardProps> = ({
   packets,
   signals,
   onSwitchToTerminal,
+  onSwitchToMasterAI,
 }) => {
   const currentPairData = marketData[selectedPair];
   const [selectedLots, setSelectedLots] = useState(botSettings.fixedLotSize);
@@ -511,8 +514,47 @@ export const ModernTechDashboard: React.FC<ModernTechDashboardProps> = ({
           </button>
         </div>
 
-        {/* Right: 1-Click Terminal Switcher & Rate Syncer */}
-        <div className="flex items-center space-x-2 text-xs font-mono">
+        {/* Right: 1-Click Terminal Switcher & Rate Syncer & Bot Controls */}
+        <div className="flex flex-wrap items-center space-x-2 text-xs font-mono">
+          {/* Direct Algo Bot Running Toggle */}
+          <button
+            type="button"
+            onClick={() =>
+              setBotSettings((prev) => ({
+                ...prev,
+                autoTrading: !prev.autoTrading,
+              }))
+            }
+            className={`flex items-center space-x-1.5 px-3 py-1.5 rounded-lg border font-bold text-xs transition-all cursor-pointer ${
+              botSettings.autoTrading
+                ? "bg-emerald-950 text-emerald-300 border-emerald-500 shadow-sm shadow-emerald-500/20 ring-1 ring-emerald-500/30"
+                : "bg-slate-800 text-slate-400 border-slate-700 hover:text-white"
+            }`}
+            title="Toggle Automated Quantitative Bot Execution ON / OFF"
+          >
+            <span className={`w-2 h-2 rounded-full ${botSettings.autoTrading ? "bg-emerald-400 animate-ping" : "bg-slate-500"}`}></span>
+            <span>{botSettings.autoTrading ? "BOT: RUNNING" : "BOT: PAUSED"}</span>
+          </button>
+
+          {/* Quick Force Scan Trigger */}
+          <button
+            type="button"
+            onClick={() => {
+              const mData = marketData[selectedPair];
+              const direction = mData.trend === "BULLISH" ? "BUY" : "SELL";
+              const is10MSniper = botSettings.strategyMode === "INTELLIGENT_10M_SNIPER_005";
+              const customSl = is10MSniper
+                ? (botSettings.stopLossPips !== undefined ? botSettings.stopLossPips : 0.05)
+                : undefined;
+              onExecuteOrder(selectedPair, direction, selectedLots, "FORCE_SCAN_SIGNAL", customSl);
+            }}
+            className="flex items-center space-x-1 px-2.5 py-1.5 bg-cyan-950/80 hover:bg-cyan-900 text-cyan-300 border border-cyan-700/60 rounded-lg text-xs font-bold transition-colors cursor-pointer"
+            title="Force quantitative scanner to evaluate confluence and trigger an immediate trade"
+          >
+            <Zap className="w-3.5 h-3.5 text-cyan-400" />
+            <span className="hidden sm:inline">Force Scan</span>
+          </button>
+
           <button
             type="button"
             onClick={onSyncRates}
@@ -532,6 +574,18 @@ export const ModernTechDashboard: React.FC<ModernTechDashboardProps> = ({
             <BarChart2 className="w-3.5 h-3.5" />
             <span>Full Chart Terminal</span>
           </button>
+
+          {onSwitchToMasterAI && (
+            <button
+              type="button"
+              onClick={onSwitchToMasterAI}
+              className="flex items-center space-x-1.5 px-3 py-1.5 bg-gradient-to-r from-indigo-500 to-purple-600 hover:from-indigo-400 hover:to-purple-500 text-white font-black rounded-lg transition-all cursor-pointer shadow-md shadow-indigo-500/20"
+              title="Open AI Master Strategy Learning Council (ICT, Simons, Wyckoff, Druckenmiller, PTJ)"
+            >
+              <Brain className="w-3.5 h-3.5 text-indigo-200" />
+              <span>Learn from Masters</span>
+            </button>
+          )}
         </div>
       </div>
 

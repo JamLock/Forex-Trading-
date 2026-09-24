@@ -98,13 +98,13 @@ export const PositionsTable: React.FC<PositionsTableProps> = ({
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-800/60">
-              {positions.map((pos) => {
+              {positions.map((pos, idx) => {
                 const isBuy = pos.type === "BUY";
                 const inProfit = pos.pnl >= 0;
 
                 return (
                   <tr
-                    key={pos.id}
+                    key={`${pos.id || 'pos'}-${pos.ticket || idx}-${idx}`}
                     className="hover:bg-slate-800/40 transition-colors"
                   >
                     {/* Ticket */}

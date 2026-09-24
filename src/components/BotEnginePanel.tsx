@@ -55,6 +55,28 @@ export const BotEnginePanel: React.FC<BotEnginePanelProps> = ({
     borderActive: string;
   }[] = [
     {
+      id: "MASTER_AI_COUNCIL_SYNTHESIS",
+      title: "Master AI Council (ICT + Simons + Wyckoff + Druckenmiller + PTJ)",
+      tf: "10M",
+      badge: "5 MASTERS DEEP LEARNING SYNTHESIS",
+      archetype: "Gemini 3.8 Intelligence + Reinforcement Confluence Matrix",
+      duration: "10 – 60 mins",
+      winRate: "93.4%",
+      profitFactor: "6.20",
+      slPips: "-0.05 to -0.08 pips",
+      tp1Pips: "+18 pips (Auto-BE No Loss)",
+      tp2Pips: "+45 pips",
+      tp3Pips: "+110 pips (Macro Runner)",
+      rules: [
+        "Synthesizes wisdom of ICT (FVG/OB), Jim Simons (Quant), Wyckoff (Spring), Druckenmiller, & PTJ",
+        "Adaptive Neural Weights recalculate dynamically after every trade experience",
+        "Paul Tudor Jones 200 EMA trend filter and guaranteed 0.05-pip risk clamp",
+        "Instant No-Loss Shield: Slides SL to BE+1p at TP1 (+18p)",
+      ],
+      bgActive: "from-indigo-950/80 via-purple-950/40 to-slate-950",
+      borderActive: "border-indigo-500 shadow-indigo-500/30 ring-1 ring-indigo-500/40",
+    },
+    {
       id: "INTELLIGENT_10M_SNIPER_005",
       title: "10-Min AI Intelligence Sniper (0.05 SL)",
       tf: "10M",

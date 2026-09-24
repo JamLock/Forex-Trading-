@@ -120,13 +120,13 @@ export const TradeHistory: React.FC<TradeHistoryProps> = ({
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-800/60">
-              {history.map((item) => {
+              {history.map((item, idx) => {
                 const isProfit = item.profit > 0;
                 const isBe = item.exitReason === "BREAKEVEN";
 
                 return (
                   <tr
-                    key={item.id}
+                    key={`${item.id || 'trade'}-${item.ticket || idx}-${idx}`}
                     className="hover:bg-slate-800/40 transition-colors"
                   >
                     <td className="px-3 py-2.5 text-slate-400">

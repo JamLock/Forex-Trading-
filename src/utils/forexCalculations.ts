@@ -90,7 +90,13 @@ export function calculateStrategyTargets(
   let tp3Pips = Math.round(tp1Pips * 4.2);
 
   // Professional Top-Trader Strategy Modifiers
-  if (strategyMode === "INTELLIGENT_10M_SNIPER_005") {
+  if (strategyMode === "MASTER_AI_COUNCIL_SYNTHESIS") {
+    // 5 Masters Synthesis (ICT + Jim Simons + Wyckoff + Druckenmiller + Tudor Jones)
+    slPips = 0.05; // Master guaranteed 0.05-pip risk clamp
+    tp1Pips = isJpy ? 18 : 16; // Locks BE immediately at TP1
+    tp2Pips = isJpy ? 45 : 38; // Trailing SL to TP1
+    tp3Pips = isJpy ? 110 : 95; // Macro Runner
+  } else if (strategyMode === "INTELLIGENT_10M_SNIPER_005") {
     // Ultra-Tight 0.05 Pip Institutional Sniper Stop Loss (0.05 pip = 0.5 pipette micro-tick)
     slPips = 0.05; // Exact 0.05 Pip Stop Loss
     tp1Pips = isJpy ? 18 : 16; // 1:360 R:R -> Triggers Auto Break-Even immediately!
@@ -178,15 +184,20 @@ export function formatPrice(pair: PairSymbol, price: number, forceDecimals?: num
 /**
  * Generate initial realistic candlestick history tailored to timeframe
  */
-export function generateInitialCandles(pair: PairSymbol, count = 60, timeframe = "5M"): Candle[] {
+export function generateInitialCandles(
+  pair: PairSymbol,
+  count = 90,
+  timeframe = "5M",
+  anchorPrice?: number
+): Candle[] {
   const candles: Candle[] = [];
-  let currentPrice = pair === "USD/JPY" ? 154.65 : 1.0862;
+  const targetEndPrice = anchorPrice || (pair === "USD/JPY" ? 157.433 : 1.08745);
   const now = Date.now();
   const timeframeMs = getTimeframeMs(timeframe);
 
   // Scale delta and volatility according to timeframe
-  let baseCycle = pair === "USD/JPY" ? 0.08 : 0.0006;
-  let baseNoise = pair === "USD/JPY" ? 0.05 : 0.0004;
+  let baseCycle = pair === "USD/JPY" ? 0.04 : 0.0003;
+  let baseNoise = pair === "USD/JPY" ? 0.025 : 0.0002;
 
   if (timeframe === "30S") {
     baseCycle *= 0.25;
@@ -209,37 +220,53 @@ export function generateInitialCandles(pair: PairSymbol, count = 60, timeframe =
   } else if (timeframe === "1H" || timeframe === "H1") {
     baseCycle *= 2.8;
     baseNoise *= 2.5;
+  } else if (timeframe === "4H" || timeframe === "H4") {
+    baseCycle *= 3.8;
+    baseNoise *= 3.2;
   }
 
-  for (let i = count - 1; i >= 0; i--) {
-    const timestamp = now - i * timeframeMs;
+  // Generate continuous candle delta sequence backwards from targetEndPrice
+  let runningClose = targetEndPrice;
+  const tempBars: Array<{
+    open: number;
+    high: number;
+    low: number;
+    close: number;
+    volume: number;
+  }> = [];
+
+  for (let i = 0; i < count; i++) {
+    // Harmonic wave cycle + realistic micro random walk
+    const cycle = Math.sin(i / 7) * baseCycle;
+    const noise = (Math.random() - 0.48) * baseNoise;
+    const delta = cycle * 0.4 + noise;
+
+    const close = runningClose;
+    const open = parseFloat((close - delta).toFixed(PRICE_PRECISIONS[pair]));
+    const wickHigh = Math.abs((Math.random() * 0.7 + 0.1) * baseNoise);
+    const wickLow = Math.abs((Math.random() * 0.7 + 0.1) * baseNoise);
+    const high = parseFloat((Math.max(open, close) + wickHigh).toFixed(PRICE_PRECISIONS[pair]));
+    const low = parseFloat((Math.min(open, close) - wickLow).toFixed(PRICE_PRECISIONS[pair]));
+    const volume = Math.floor(700 + Math.random() * 2400);
+
+    tempBars.unshift({ open, high, low, close, volume });
+    // Next previous candle closed at this candle's open (continuous trading flow)
+    runningClose = open;
+  }
+
+  // Assign precise timestamps (increments of timeframeMs, latest is now)
+  for (let i = 0; i < count; i++) {
+    const timestamp = now - (count - 1 - i) * timeframeMs;
     const date = new Date(timestamp);
     const timeStr =
       timeframe === "30S"
         ? date.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", second: "2-digit" })
         : date.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
 
-    // Wave oscillation + slight random walk
-    const cycle = Math.sin(i / 5) * baseCycle;
-    const noise = (Math.random() - 0.49) * baseNoise;
-    const delta = cycle * 0.3 + noise;
-
-    const open = currentPrice;
-    const close = parseFloat((open + delta).toFixed(PRICE_PRECISIONS[pair]));
-    const wickVariance = Math.random() * (pair === "USD/JPY" ? baseNoise * 0.8 : baseNoise * 0.8);
-    const high = parseFloat((Math.max(open, close) + wickVariance).toFixed(PRICE_PRECISIONS[pair]));
-    const low = parseFloat((Math.min(open, close) - wickVariance).toFixed(PRICE_PRECISIONS[pair]));
-    const volume = Math.floor(600 + Math.random() * 2600);
-
-    currentPrice = close;
     candles.push({
       time: timeStr,
       timestamp,
-      open,
-      high,
-      low,
-      close,
-      volume,
+      ...tempBars[i],
     });
   }
 

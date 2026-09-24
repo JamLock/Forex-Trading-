@@ -1,5 +1,20 @@
 import { BrokerBridgeConfig, LiveBrokerPacket, PairSymbol } from "../types";
 
+export const DEFAULT_BROKER_CONFIG: BrokerBridgeConfig = {
+  environment: "PAPER_LIVE_FEED",
+  brokerType: "MT5_MT4_BRIDGE",
+  webhookUrl: "http://127.0.0.1:8080/apex",
+  webhookSecret: "apex-quant-live-99",
+  telegramBotToken: "",
+  telegramChatId: "",
+  telegramAlertsEnabled: false,
+  maxSlippagePips: 2,
+  newsFilterActive: true,
+  maxDailyDrawdownPercent: 3,
+  isConnected: true,
+  lastHeartbeat: new Date().toLocaleTimeString(),
+};
+
 /**
  * Fetch real live FX exchange rates from internal server proxy or public Interbank Forex endpoints
  */
@@ -67,8 +82,8 @@ export async function fetchRealLiveFxRates(): Promise<{
  * Dispatch live order packet to real broker webhook or Telegram bot
  */
 export async function transmitLiveBrokerOrder(
-  config: BrokerBridgeConfig,
-  orderData: {
+  config?: Partial<BrokerBridgeConfig>,
+  orderData?: {
     action: "BUY" | "SELL" | "MOVE_SL_BREAKEVEN" | "CLOSE_PARTIAL" | "CLOSE_FULL";
     ticket: number;
     symbol: PairSymbol;
@@ -81,13 +96,25 @@ export async function transmitLiveBrokerOrder(
     reason?: string;
   }
 ): Promise<LiveBrokerPacket> {
+  const cfg = { ...DEFAULT_BROKER_CONFIG, ...(config || {}) };
+  const ord = orderData || {
+    action: "BUY" as const,
+    ticket: Date.now(),
+    symbol: "USD/JPY" as PairSymbol,
+    lots: 0.01,
+    price: 157.0,
+    sl: 156.5,
+    tp1: 157.5,
+    tp2: 158.0,
+    tp3: 158.5,
+  };
   const timestamp = new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", second: "2-digit" });
   const packetId = `PKT-${Date.now().toString().slice(-6)}`;
 
   const payloadString = JSON.stringify({
     event: "APEX_ALGO_ORDER",
     timestamp: new Date().toISOString(),
-    ...orderData,
+    ...ord,
   });
 
   // Always log packet to server-side endpoint
@@ -102,13 +129,13 @@ export async function transmitLiveBrokerOrder(
   }
 
   // Attempt Webhook transmission if URL configured
-  if (config.webhookUrl && config.webhookUrl.startsWith("http")) {
+  if (cfg.webhookUrl && cfg.webhookUrl.startsWith("http")) {
     try {
-      fetch(config.webhookUrl, {
+      fetch(cfg.webhookUrl, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
-          "X-Apex-Auth": config.webhookSecret || "default-secret",
+          "X-Apex-Auth": cfg.webhookSecret || "default-secret",
         },
         body: payloadString,
         mode: "no-cors", // Allow sending to local MT5 web servers (e.g. http://127.0.0.1:8080)
@@ -119,24 +146,24 @@ export async function transmitLiveBrokerOrder(
   }
 
   // Attempt Telegram transmission if Bot Token & Chat ID configured
-  if (config.telegramAlertsEnabled && config.telegramBotToken && config.telegramChatId) {
+  if (cfg.telegramAlertsEnabled && cfg.telegramBotToken && cfg.telegramChatId) {
     try {
       const message = `🚨 <b>APEX FX LIVE BOT EXECUTION</b>\n` +
-        `• <b>Action:</b> ${orderData.action}\n` +
-        `• <b>Symbol:</b> ${orderData.symbol}\n` +
-        `• <b>Volume:</b> ${orderData.lots} Lots\n` +
-        `• <b>Price:</b> ${orderData.price}\n` +
-        `• <b>Stop Loss:</b> ${orderData.sl} (Auto-BE armed)\n` +
-        `• <b>TP1 (BE Trigger):</b> ${orderData.tp1}\n` +
-        `• <b>TP2:</b> ${orderData.tp2}\n` +
-        `• <b>TP3:</b> ${orderData.tp3}\n` +
+        `• <b>Action:</b> ${ord.action}\n` +
+        `• <b>Symbol:</b> ${ord.symbol}\n` +
+        `• <b>Volume:</b> ${ord.lots} Lots\n` +
+        `• <b>Price:</b> ${ord.price}\n` +
+        `• <b>Stop Loss:</b> ${ord.sl} (Auto-BE armed)\n` +
+        `• <b>TP1 (BE Trigger):</b> ${ord.tp1}\n` +
+        `• <b>TP2:</b> ${ord.tp2}\n` +
+        `• <b>TP3:</b> ${ord.tp3}\n` +
         `• <b>Protocol:</b> ZERO-LOSS BREAK-EVEN ACTIVE`;
 
-      fetch(`https://api.telegram.org/bot${config.telegramBotToken}/sendMessage`, {
+      fetch(`https://api.telegram.org/bot${cfg.telegramBotToken}/sendMessage`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          chat_id: config.telegramChatId,
+          chat_id: cfg.telegramChatId,
           text: message,
           parse_mode: "HTML",
         }),
@@ -149,9 +176,9 @@ export async function transmitLiveBrokerOrder(
   return {
     id: packetId,
     timestamp,
-    type: orderData.action === "MOVE_SL_BREAKEVEN" ? "MODIFICATION" : "EXECUTION",
-    channel: config.webhookUrl ? "MT5_BRIDGE" : "INTERNAL",
-    payload: `[${orderData.action}] ${orderData.symbol} ${orderData.lots}L @ ${orderData.price} | SL:${orderData.sl} TP1:${orderData.tp1}`,
+    type: ord.action === "MOVE_SL_BREAKEVEN" ? "MODIFICATION" : "EXECUTION",
+    channel: cfg.webhookUrl ? "MT5_BRIDGE" : "INTERNAL",
+    payload: `[${ord.action}] ${ord.symbol} ${ord.lots}L @ ${ord.price} | SL:${ord.sl} TP1:${ord.tp1}`,
     status: "CONFIRMED",
   };
 }

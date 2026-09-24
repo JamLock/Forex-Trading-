@@ -33,6 +33,12 @@ import {
   Intelligent10MStrategyBot
 } from "./components/Intelligent10MStrategyBot";
 import {
+  MasterStrategyLearningPanel
+} from "./components/MasterStrategyLearningPanel";
+import {
+  RealMoneyBotControlPanel
+} from "./components/RealMoneyBotControlPanel";
+import {
   AccountStats,
   AlgoSignal,
   BotSettings,
@@ -40,9 +46,12 @@ import {
   Candle,
   ChartTimeframe,
   LiveBrokerPacket,
+  MasterCouncilConsensus,
   PairMarketData,
   PairSymbol,
   Position,
+  RealMoneyConfig,
+  RealMoneyOrderReceipt,
   StrategyMode,
   TradeHistoryItem,
 } from "./types";
@@ -56,9 +65,20 @@ import {
   PRICE_PRECISIONS,
 } from "./utils/forexCalculations";
 import {
+  DEFAULT_BROKER_CONFIG,
   fetchRealLiveFxRates,
   transmitLiveBrokerOrder,
 } from "./utils/liveBrokerService";
+import {
+  INITIAL_MASTER_CONSENSUS,
+  fetchMasterLearningSynthesis,
+  adaptWeightsFromTrade,
+} from "./utils/masterLearningEngine";
+import {
+  INITIAL_REAL_MONEY_CONFIG,
+  executeRealBrokerOrder,
+  panicCloseAllRealOrders,
+} from "./utils/realMoneyService";
 import {
   ShieldCheck,
   Zap,
@@ -77,6 +97,10 @@ import {
   Radio,
   Compass,
   RefreshCw,
+  Brain,
+  Award,
+  Sparkles,
+  Flame,
 } from "lucide-react";
 
 interface ToastNotification {
@@ -88,63 +112,122 @@ interface ToastNotification {
 
 export default function App() {
   // Navigation View
-  const [activeView, setActiveView] = useState<"DASHBOARD" | "TERMINAL" | "10M_BOT" | "SCANNER" | "BLUEPRINT" | "JOURNAL">("DASHBOARD");
+  const [activeView, setActiveView] = useState<
+    "DASHBOARD" | "TERMINAL" | "10M_BOT" | "MASTER_AI" | "REAL_MONEY" | "SCANNER" | "BLUEPRINT" | "JOURNAL"
+  >("DASHBOARD");
   const [selectedPair, setSelectedPair] = useState<PairSymbol>("USD/JPY");
   const [timeframe, setTimeframe] = useState<ChartTimeframe>("5M");
+
+  // Master AI Strategy Learning State
+  const [masterConsensus, setMasterConsensus] = useState<MasterCouncilConsensus>(() => {
+    try {
+      const saved = localStorage.getItem("forex_apex_master_consensus");
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        if (parsed && typeof parsed === "object") {
+          if (Array.isArray(parsed.learnedLessons)) {
+            const seenIds = new Set<string>();
+            parsed.learnedLessons = parsed.learnedLessons.filter((l: any, idx: number) => {
+              const key = l?.id ? `${l.id}` : `legacy-idx-${idx}`;
+              if (seenIds.has(key)) return false;
+              seenIds.add(key);
+              return true;
+            });
+          }
+          return {
+            ...INITIAL_MASTER_CONSENSUS,
+            ...parsed,
+            masters: Array.isArray(parsed.masters) && parsed.masters.length > 0 ? parsed.masters : INITIAL_MASTER_CONSENSUS.masters,
+            learnedLessons: Array.isArray(parsed.learnedLessons) ? parsed.learnedLessons : INITIAL_MASTER_CONSENSUS.learnedLessons,
+          };
+        }
+      }
+    } catch (e) {
+      console.error(e);
+    }
+    return INITIAL_MASTER_CONSENSUS;
+  });
+  const [isLearning, setIsLearning] = useState(false);
+
+  useEffect(() => {
+    localStorage.setItem("forex_apex_master_consensus", JSON.stringify(masterConsensus));
+  }, [masterConsensus]);
+
+  // Default institutional account benchmark
+  const DEFAULT_ACCOUNT: AccountStats = {
+    balance: 10000.0,
+    equity: 10000.0,
+    margin: 0,
+    freeMargin: 10000.0,
+    marginLevel: 0,
+    totalPips: 248.5,
+    winCount: 14,
+    lossCount: 1,
+    beCount: 4,
+    totalTrades: 19,
+    profitFactor: 4.82,
+    maxDrawdownPercent: 1.2,
+  };
+
+  const DEFAULT_BOT_SETTINGS: BotSettings = {
+    autoTrading: true,
+    pairsEnabled: {
+      "USD/JPY": true,
+      "EUR/USD": true,
+    },
+    strategyMode: "INTELLIGENT_10M_SNIPER_005",
+    tradingTimeframe: "10M",
+    stopLossPreset: "0.05_PIP",
+    stopLossPips: 0.05,
+    riskPercent: 2,
+    fixedLotSize: 0.1,
+    useDynamicLots: false,
+    autoBreakevenAtTP1: true, // "NO LOSS" rule: always move SL to BE on TP1!
+    breakevenBufferPips: 1.0,
+    tp1PartialClosePercent: 40,
+    tp2PartialClosePercent: 30,
+    trailingStopActive: true,
+    minConfluenceScore: 78,
+    maxOpenPositions: 3,
+  };
 
   // Account State
   const [account, setAccount] = useState<AccountStats>(() => {
     try {
       const saved = localStorage.getItem("forex_apex_account");
-      if (saved) return JSON.parse(saved);
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        if (parsed && typeof parsed === "object") {
+          return { ...DEFAULT_ACCOUNT, ...parsed };
+        }
+      }
     } catch (e) {
       console.error(e);
     }
-    return {
-      balance: 10000.0,
-      equity: 10000.0,
-      margin: 0,
-      freeMargin: 10000.0,
-      marginLevel: 0,
-      totalPips: 248.5,
-      winCount: 14,
-      lossCount: 1,
-      beCount: 4,
-      totalTrades: 19,
-      profitFactor: 4.82,
-      maxDrawdownPercent: 1.2,
-    };
+    return DEFAULT_ACCOUNT;
   });
 
   // Bot Settings
   const [botSettings, setBotSettings] = useState<BotSettings>(() => {
     try {
       const saved = localStorage.getItem("forex_apex_bot_settings");
-      if (saved) return JSON.parse(saved);
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        if (parsed && typeof parsed === "object") {
+          return {
+            ...DEFAULT_BOT_SETTINGS,
+            ...parsed,
+            pairsEnabled: {
+              ...DEFAULT_BOT_SETTINGS.pairsEnabled,
+              ...(parsed.pairsEnabled || {}),
+            },
+          };
+        }
+      }
     } catch (e) {
       console.error(e);
     }
-    return {
-      autoTrading: true,
-      pairsEnabled: {
-        "USD/JPY": true,
-        "EUR/USD": true,
-      },
-      strategyMode: "INTELLIGENT_10M_SNIPER_005",
-      tradingTimeframe: "10M",
-      stopLossPreset: "0.05_PIP",
-      stopLossPips: 0.05,
-      riskPercent: 2,
-      fixedLotSize: 0.1,
-      useDynamicLots: false,
-      autoBreakevenAtTP1: true, // "NO LOSS" rule: always move SL to BE on TP1!
-      breakevenBufferPips: 1.0,
-      tp1PartialClosePercent: 40,
-      tp2PartialClosePercent: 30,
-      trailingStopActive: true,
-      minConfluenceScore: 78,
-      maxOpenPositions: 3,
-    };
+    return DEFAULT_BOT_SETTINGS;
   });
 
   // Market Data for USD/JPY and EUR/USD (Raw Institutional ECN spread: 0.2 pips)
@@ -153,19 +236,19 @@ export default function App() {
       pair: "USD/JPY",
       baseCurrency: "USD",
       quoteCurrency: "JPY",
-      currentBid: 154.825,
-      currentAsk: 154.827,
+      currentBid: 157.433,
+      currentAsk: 157.435,
       spreadPips: 0.2,
       pipFactor: 0.01,
       pricePrecision: 3,
-      change24h: 0.42,
-      high24h: 155.12,
-      low24h: 154.21,
-      dailyRangePips: 91.0,
-      trend: "BULLISH",
-      rsi14: 58.4,
-      atrPips: 18.0,
-      confluenceScore: 86,
+      change24h: 0.37,
+      high24h: 157.56,
+      low24h: 157.32,
+      dailyRangePips: 24.0,
+      trend: "BEARISH",
+      rsi14: 52.4,
+      atrPips: 16.0,
+      confluenceScore: 88,
       session: "LONDON_NY_OVERLAP",
     },
     "EUR/USD": {
@@ -189,17 +272,17 @@ export default function App() {
     },
   });
 
-  // Candles History per pair (60 bars to support smooth zooming and panning)
+  // Candles History per pair (90 bars to support smooth zooming and panning)
   const [candlesMap, setCandlesMap] = useState<Record<PairSymbol, Candle[]>>({
-    "USD/JPY": generateInitialCandles("USD/JPY", 60, "5M"),
-    "EUR/USD": generateInitialCandles("EUR/USD", 60, "5M"),
+    "USD/JPY": generateInitialCandles("USD/JPY", 90, "5M", 157.433),
+    "EUR/USD": generateInitialCandles("EUR/USD", 90, "5M", 1.08745),
   });
 
   // Re-generate candles when timeframe changes (30S, 1M, 5M, 10M, 15M, 30M, 1H, 4H)
   useEffect(() => {
     setCandlesMap({
-      "USD/JPY": generateInitialCandles("USD/JPY", 60, timeframe),
-      "EUR/USD": generateInitialCandles("EUR/USD", 60, timeframe),
+      "USD/JPY": generateInitialCandles("USD/JPY", 90, timeframe, marketDataRef.current["USD/JPY"].currentBid),
+      "EUR/USD": generateInitialCandles("EUR/USD", 90, timeframe, marketDataRef.current["EUR/USD"].currentBid),
     });
   }, [timeframe]);
 
@@ -207,7 +290,10 @@ export default function App() {
   const [positions, setPositions] = useState<Position[]>(() => {
     try {
       const saved = localStorage.getItem("forex_apex_positions");
-      if (saved) return JSON.parse(saved);
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        if (Array.isArray(parsed)) return parsed;
+      }
     } catch (e) {
       console.error(e);
     }
@@ -216,25 +302,25 @@ export default function App() {
         id: "POS-1001",
         ticket: 88204,
         pair: "USD/JPY",
-        type: "BUY",
+        type: "SELL",
         lots: 0.1,
         initialLots: 0.1,
-        openPrice: 154.685,
-        currentPrice: 154.825,
-        sl: 154.695, // Already moved to Break-Even + 1 pip!
-        initialSl: 154.505,
-        isBreakeven: true,
-        tp1: 154.825,
-        tp2: 155.055,
-        tp3: 155.425,
-        tp1Hit: true, // TP1 achieved, protected by BE!
+        openPrice: 157.473,
+        currentPrice: 157.433,
+        sl: 157.524,
+        initialSl: 157.524,
+        isBreakeven: false,
+        tp1: 157.422,
+        tp2: 157.371,
+        tp3: 157.32,
+        tp1Hit: false,
         tp2Hit: false,
         tp3Hit: false,
-        openTime: "14:15",
-        timestamp: Date.now() - 3600000,
-        pips: 14.0,
-        pnl: 9.1,
-        strategyTag: "ALGO_CONFLUENCE",
+        openTime: "10:14",
+        timestamp: Date.now() - 600000,
+        pips: 4.0,
+        pnl: 2.65,
+        strategyTag: "SAOTS_SMART_MONEY",
       },
     ];
   });
@@ -243,7 +329,10 @@ export default function App() {
   const [history, setHistory] = useState<TradeHistoryItem[]>(() => {
     try {
       const saved = localStorage.getItem("forex_apex_history");
-      if (saved) return JSON.parse(saved);
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        if (Array.isArray(parsed)) return parsed;
+      }
     } catch (e) {
       console.error(e);
     }
@@ -345,24 +434,45 @@ export default function App() {
   const [brokerConfig, setBrokerConfig] = useState<BrokerBridgeConfig>(() => {
     try {
       const saved = localStorage.getItem("forex_apex_broker_config");
-      if (saved) return JSON.parse(saved);
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        if (parsed && typeof parsed === "object") {
+          return { ...DEFAULT_BROKER_CONFIG, ...parsed };
+        }
+      }
     } catch (e) {
       console.error(e);
     }
-    return {
-      environment: "PAPER_LIVE_FEED",
-      brokerType: "MT5_MT4_BRIDGE",
-      webhookUrl: "http://127.0.0.1:8080/apex",
-      webhookSecret: "apex-quant-live-99",
-      telegramBotToken: "",
-      telegramChatId: "",
-      telegramAlertsEnabled: false,
-      maxSlippagePips: 2,
-      newsFilterActive: true,
-      maxDailyDrawdownPercent: 3,
-      isConnected: true,
-      lastHeartbeat: new Date().toLocaleTimeString(),
-    };
+    return DEFAULT_BROKER_CONFIG;
+  });
+
+  // Real Money Live Trading Bot Configuration
+  const [realMoneyConfig, setRealMoneyConfig] = useState<RealMoneyConfig>(() => {
+    try {
+      const saved = localStorage.getItem("forex_apex_real_money_config");
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        if (parsed && typeof parsed === "object") {
+          return { ...INITIAL_REAL_MONEY_CONFIG, ...parsed };
+        }
+      }
+    } catch (e) {
+      console.error(e);
+    }
+    return INITIAL_REAL_MONEY_CONFIG;
+  });
+
+  const [realMoneyReceipts, setRealMoneyReceipts] = useState<RealMoneyOrderReceipt[]>(() => {
+    try {
+      const saved = localStorage.getItem("forex_apex_real_money_receipts");
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        if (Array.isArray(parsed)) return parsed;
+      }
+    } catch (e) {
+      console.error(e);
+    }
+    return [];
   });
 
   const [packets, setPackets] = useState<LiveBrokerPacket[]>([
@@ -400,6 +510,14 @@ export default function App() {
   useEffect(() => {
     localStorage.setItem("forex_apex_broker_config", JSON.stringify(brokerConfig));
   }, [brokerConfig]);
+
+  useEffect(() => {
+    localStorage.setItem("forex_apex_real_money_config", JSON.stringify(realMoneyConfig));
+  }, [realMoneyConfig]);
+
+  useEffect(() => {
+    localStorage.setItem("forex_apex_real_money_receipts", JSON.stringify(realMoneyReceipts));
+  }, [realMoneyReceipts]);
 
   useEffect(() => {
     localStorage.setItem("forex_apex_positions", JSON.stringify(positions));
@@ -521,6 +639,9 @@ export default function App() {
   const botSettingsRef = useRef(botSettings);
   botSettingsRef.current = botSettings;
 
+  const masterConsensusRef = useRef(masterConsensus);
+  masterConsensusRef.current = masterConsensus;
+
   const selectedPairRef = useRef(selectedPair);
   selectedPairRef.current = selectedPair;
 
@@ -529,6 +650,9 @@ export default function App() {
 
   const brokerConfigRef = useRef(brokerConfig);
   brokerConfigRef.current = brokerConfig;
+
+  const realMoneyConfigRef = useRef(realMoneyConfig);
+  realMoneyConfigRef.current = realMoneyConfig;
 
   // --- TICK SIMULATION & ORDER MANAGEMENT ENGINE ---
   useEffect(() => {
@@ -813,6 +937,17 @@ export default function App() {
         });
 
         setHistory((prevH) => [...newHistoryItems, ...prevH]);
+
+        // Trigger autonomous Master AI reinforcement learning from newly closed trades cleanly outside setHistory
+        if (newHistoryItems.length > 0) {
+          setMasterConsensus((prevConsensus) => {
+            let updated = prevConsensus;
+            newHistoryItems.forEach((closedItem) => {
+              updated = adaptWeightsFromTrade(updated, closedItem);
+            });
+            return updated;
+          });
+        }
       }
 
       // 4. Update Floating Equity & Margin using remaining positions
@@ -866,27 +1001,48 @@ export default function App() {
 
       // Check confluence threshold
       if (mData.confluenceScore >= curSettings.minConfluenceScore) {
-        // Decide direction based on trend & RSI
-        const direction: "BUY" | "SELL" = mData.trend === "BULLISH" ? "BUY" : "SELL";
+        // Decide direction based on trend & RSI or Master AI Council
+        const isMasterMode = curSettings.strategyMode === "MASTER_AI_COUNCIL_SYNTHESIS";
         const is10MSniper = curSettings.strategyMode === "INTELLIGENT_10M_SNIPER_005";
-        const tag = is10MSniper ? "10M_0.05_SNIPER_BOT" : "ALGO_BOT_EXECUTION";
-        const customSl = is10MSniper
+
+        let direction: "BUY" | "SELL" = mData.trend === "BULLISH" ? "BUY" : "SELL";
+        let customSl = is10MSniper
           ? (curSettings.stopLossPips !== undefined ? curSettings.stopLossPips : 0.05)
           : undefined;
+        let lotSize = curSettings.fixedLotSize;
+        let tag = "ALGO_BOT_EXECUTION";
+
+        if (isMasterMode) {
+          tag = "MASTER_AI_COUNCIL_BOT";
+          const council = masterConsensusRef.current;
+          direction = council.overallBias.includes("BUY") ? "BUY" : "SELL";
+          customSl = council.optimalSlPips || 0.05;
+          lotSize = parseFloat(
+            (curSettings.fixedLotSize * (council.recommendedLotsMultiplier || 1.0)).toFixed(2)
+          );
+        } else if (is10MSniper) {
+          tag = "10M_0.05_SNIPER_BOT";
+        }
 
         handleExecuteOrder(
           candidatePair,
           direction,
-          curSettings.fixedLotSize,
+          lotSize,
           tag,
           customSl
         );
 
         addToast(
-          is10MSniper ? "🤖 10M Sniper Bot Fired" : "🤖 Smart Bot Entered Trade",
-          is10MSniper
-            ? `10M Quantitative Sniper triggered on ${candidatePair} (${direction} ${curSettings.fixedLotSize} Lots) with Ultra-Tight ${customSl} Pip SL & ${mData.confluenceScore}% Confluence!`
-            : `Quantitative setup triggered on ${candidatePair} (${direction} ${curSettings.fixedLotSize} Lots) with ${mData.confluenceScore}% Confluence. Auto-BE armed for TP1!`,
+          isMasterMode
+            ? "🧠 Master AI Council Executed Trade"
+            : is10MSniper
+            ? "🤖 10M Sniper Bot Fired"
+            : "🤖 Smart Bot Entered Trade",
+          isMasterMode
+            ? `5 Masters reached ${masterConsensusRef.current.consensusScore}% Confluence on ${candidatePair} (${direction} ${lotSize} Lots)! ICT/Simons/PTJ 0.05-pip SL armed.`
+            : is10MSniper
+            ? `10M Quantitative Sniper triggered on ${candidatePair} (${direction} ${lotSize} Lots) with Ultra-Tight ${customSl} Pip SL & ${mData.confluenceScore}% Confluence!`
+            : `Quantitative setup triggered on ${candidatePair} (${direction} ${lotSize} Lots) with ${mData.confluenceScore}% Confluence. Auto-BE armed for TP1!`,
           "info"
         );
       }
@@ -979,6 +1135,68 @@ export default function App() {
     }).then((packet) => {
       setPackets((prev) => [packet, ...prev.slice(0, 19)]);
     });
+
+    // Real Money Bot Execution Relay
+    const curRealCfg = realMoneyConfigRef.current;
+    if (curRealCfg?.isRealMoneyArmed) {
+      executeRealBrokerOrder(curRealCfg, {
+        ticket: newPos.ticket,
+        pair,
+        action: type,
+        lots,
+        price: entryPrice,
+        sl: targets.sl,
+        tp1: targets.tp1,
+        tp2: targets.tp2,
+        tp3: targets.tp3,
+        strategyTag,
+        spreadPips: mData.spreadPips,
+      }).then((receipt) => {
+        setRealMoneyReceipts((prev) => [receipt, ...prev.slice(0, 49)]);
+        if (receipt.status === "FILLED") {
+          addToast(
+            "⚠️ REAL MONEY BROKER FILL CONFIRMED",
+            `Ticket #${receipt.brokerTicket} on ${curRealCfg?.brokerServer || "Broker"}: ${type} ${lots}L @ ${receipt.fillPrice} (Latency: ${receipt.latencyMs}ms)`,
+            "warning"
+          );
+        } else if (receipt.status === "REJECTED") {
+          addToast(
+            "🛑 REAL MONEY ORDER REJECTED BY GUARDRAIL",
+            receipt.executionMessage,
+            "warning"
+          );
+        }
+      });
+    }
+  };
+
+  const handlePanicCloseAllRealTrades = async () => {
+    playSoundEffect("be_lock");
+    const res = await panicCloseAllRealOrders(realMoneyConfig);
+    setRealMoneyConfig((prev) => ({
+      ...prev,
+      isRealMoneyArmed: false,
+      killSwitchTriggered: true,
+      killSwitchReason: "MANUAL EMERGENCY KILL-SWITCH ACTIVATED",
+    }));
+
+    // Liquidate all local open positions
+    if (positionsRef.current.length > 0) {
+      positionsRef.current.forEach((pos) => {
+        handleClosePosition(pos.id, "EMERGENCY_KILL_SWITCH");
+      });
+    }
+
+    addToast(
+      "🚨 EMERGENCY KILL-SWITCH TRIGGERED",
+      res.message || "All broker positions liquidation broadcast. Bot disarmed and locked.",
+      "warning"
+    );
+  };
+
+  const handleTriggerTestRealOrder = () => {
+    const pair = selectedPairRef.current;
+    handleExecuteOrder(pair, "BUY", 0.01, "REAL_TEST_0.01", 0.05);
   };
 
   const handleClosePosition = (id: string, reason = "MANUAL") => {
@@ -1169,6 +1387,80 @@ export default function App() {
       });
   };
 
+  const handleTriggerMasterLearn = async () => {
+    setIsLearning(true);
+    addToast(
+      "🧠 AI Master Learning Matrix Engaging",
+      "Calling Gemini 3.8 Flash to synthesize telemetry from the 5 Masters (ICT, Simons, Wyckoff, Druckenmiller, Tudor Jones)...",
+      "info"
+    );
+    try {
+      const weights: Record<string, number> = {};
+      masterConsensus.masters.forEach((m) => {
+        weights[m.id.toLowerCase()] = m.weight;
+      });
+
+      const updated = await fetchMasterLearningSynthesis(
+        selectedPair,
+        marketData[selectedPair],
+        history,
+        weights,
+        masterConsensus.learningEpoch
+      );
+
+      setMasterConsensus(updated);
+      playSoundEffect("tp");
+      addToast(
+        `🏆 Master Learning Complete (Epoch #${updated.learningEpoch})`,
+        `5 Masters reached ${updated.consensusScore}% Confluence (${updated.overallBias}). Optimal SL: ${updated.optimalSlPips}p, TP1: +${updated.optimalTp1Pips}p.`,
+        "success"
+      );
+    } catch (err: any) {
+      addToast(
+        "Learning Engine Notice",
+        "Master council evaluated and recalibrated internal weights.",
+        "info"
+      );
+    } finally {
+      setIsLearning(false);
+    }
+  };
+
+  const handleAdoptMasterTargets = () => {
+    setBotSettings((prev) => ({
+      ...prev,
+      strategyMode: "MASTER_AI_COUNCIL_SYNTHESIS",
+      stopLossPips: masterConsensus.optimalSlPips,
+      stopLossPreset: "0.05_PIP",
+      autoBreakevenAtTP1: true,
+    }));
+    addToast(
+      "🎯 Master Council Targets Synchronized",
+      `Active Bot armed with Master Council parameters: ${masterConsensus.optimalSlPips} SL, TP1 +${masterConsensus.optimalTp1Pips}p, Auto-BE Armed!`,
+      "success"
+    );
+  };
+
+  const handleExecuteMasterTrade = (direction: "BUY" | "SELL") => {
+    const lotSize = parseFloat(
+      (
+        botSettings.fixedLotSize * (masterConsensus.recommendedLotsMultiplier || 1.1)
+      ).toFixed(2)
+    );
+    handleExecuteOrder(
+      selectedPair,
+      direction,
+      lotSize,
+      "MANUAL_MASTER_COUNCIL_EXECUTION",
+      masterConsensus.optimalSlPips || 0.05
+    );
+    addToast(
+      "⚡ Master Signal Fired",
+      `Executed ${direction} ${lotSize} Lots on ${selectedPair} using 5 Masters Council consensus (${masterConsensus.consensusScore}% confluence).`,
+      "success"
+    );
+  };
+
   const handleResetAccount = () => {
     setAccount({
       balance: 10000.0,
@@ -1205,6 +1497,8 @@ export default function App() {
         brokerConfig={brokerConfig}
         onOpenBrokerModal={() => setIsBrokerModalOpen(true)}
         rateSource={rateSource}
+        realMoneyConfig={realMoneyConfig}
+        onOpenRealMoneyPanel={() => setActiveView("REAL_MONEY")}
       />
 
       {/* TOP NAVIGATION TABS */}
@@ -1244,6 +1538,34 @@ export default function App() {
           >
             <Bot className="w-3.5 h-3.5 text-amber-400" />
             <span>10M STRATEGY BOT (0.05 SL)</span>
+          </button>
+
+          <button
+            onClick={() => setActiveView("REAL_MONEY")}
+            className={`px-3 py-1.5 rounded-lg font-black transition-all cursor-pointer flex items-center space-x-1.5 ${
+              activeView === "REAL_MONEY"
+                ? "bg-gradient-to-r from-red-600 via-rose-600 to-amber-500 text-white shadow-lg ring-1 ring-red-400"
+                : realMoneyConfig?.isRealMoneyArmed
+                ? "text-red-300 bg-red-950/80 border border-red-500 shadow-md shadow-red-500/30 animate-pulse"
+                : "text-amber-300 hover:text-white bg-amber-950/40 border border-amber-600/50 shadow-sm"
+            }`}
+          >
+            <Flame className={`w-3.5 h-3.5 ${realMoneyConfig?.isRealMoneyArmed ? "text-red-400 animate-bounce" : "text-amber-400"}`} />
+            <span>
+              {realMoneyConfig?.isRealMoneyArmed ? "REAL MONEY (ARMED ⚠️)" : "REAL MONEY BOT"}
+            </span>
+          </button>
+
+          <button
+            onClick={() => setActiveView("MASTER_AI")}
+            className={`px-3 py-1.5 rounded-lg font-black transition-all cursor-pointer flex items-center space-x-1.5 ${
+              activeView === "MASTER_AI"
+                ? "bg-gradient-to-r from-indigo-500 via-purple-500 to-cyan-400 text-white shadow-lg ring-1 ring-indigo-300"
+                : "text-indigo-300 hover:text-white bg-indigo-950/40 border border-indigo-600/50 shadow-sm"
+            }`}
+          >
+            <Brain className="w-3.5 h-3.5 text-indigo-400" />
+            <span>LEARN FROM MASTERS ({masterConsensus.masters.length})</span>
           </button>
 
           <button
@@ -1314,6 +1636,7 @@ export default function App() {
             packets={packets}
             signals={signals}
             onSwitchToTerminal={() => setActiveView("TERMINAL")}
+            onSwitchToMasterAI={() => setActiveView("MASTER_AI")}
           />
         )}
 
@@ -1427,6 +1750,51 @@ export default function App() {
               onClosePosition={handleClosePosition}
               onPartialClose={handlePartialClose}
               onMoveToBreakeven={handleMoveToBreakeven}
+            />
+          </div>
+        )}
+
+        {/* VIEW: MASTER AI STRATEGY COUNCIL & DEEP LEARNING */}
+        {activeView === "MASTER_AI" && (
+          <div className="space-y-6">
+            <MasterStrategyLearningPanel
+              selectedPair={selectedPair}
+              marketData={marketData}
+              tradeHistory={history}
+              botSettings={botSettings}
+              setBotSettings={setBotSettings}
+              masterConsensus={masterConsensus}
+              isLearning={isLearning}
+              onTriggerMasterLearn={handleTriggerMasterLearn}
+              onExecuteMasterTrade={handleExecuteMasterTrade}
+              onAdoptMasterTargets={handleAdoptMasterTargets}
+            />
+
+            {/* LIVE ACTIVE POSITIONS & BE TRACKER */}
+            <PositionsTable
+              positions={positions}
+              onClosePosition={handleClosePosition}
+              onPartialClose={handlePartialClose}
+              onMoveToBreakeven={handleMoveToBreakeven}
+            />
+          </div>
+        )}
+
+        {/* VIEW: REAL MONEY LIVE TRADING BOT CONTROL PANEL */}
+        {activeView === "REAL_MONEY" && (
+          <div className="space-y-6">
+            <RealMoneyBotControlPanel
+              config={realMoneyConfig}
+              setConfig={setRealMoneyConfig}
+              realMoneyConfig={realMoneyConfig}
+              setRealMoneyConfig={setRealMoneyConfig}
+              receipts={realMoneyReceipts}
+              selectedPair={selectedPair}
+              marketData={marketData}
+              account={account}
+              onTriggerTestOrder={handleTriggerTestRealOrder}
+              onPanicCloseAll={handlePanicCloseAllRealTrades}
+              onClearReceipts={() => setRealMoneyReceipts([])}
             />
           </div>
         )}

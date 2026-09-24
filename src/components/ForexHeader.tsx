@@ -14,7 +14,7 @@ import {
   Server,
   Radio,
 } from "lucide-react";
-import { AccountStats, BotSettings, BrokerBridgeConfig, PairMarketData, PairSymbol } from "../types";
+import { AccountStats, BotSettings, BrokerBridgeConfig, PairMarketData, PairSymbol, RealMoneyConfig } from "../types";
 import { formatPrice } from "../utils/forexCalculations";
 
 interface ForexHeaderProps {
@@ -29,6 +29,8 @@ interface ForexHeaderProps {
   brokerConfig: BrokerBridgeConfig;
   onOpenBrokerModal: () => void;
   rateSource: string;
+  realMoneyConfig?: RealMoneyConfig;
+  onOpenRealMoneyPanel?: () => void;
 }
 
 export const ForexHeader: React.FC<ForexHeaderProps> = ({
@@ -43,8 +45,12 @@ export const ForexHeader: React.FC<ForexHeaderProps> = ({
   brokerConfig,
   onOpenBrokerModal,
   rateSource,
+  realMoneyConfig,
+  onOpenRealMoneyPanel,
 }) => {
   const currentPairData = marketData[selectedPair];
+  const isRealArmed = Boolean(realMoneyConfig?.isRealMoneyArmed);
+  const realBrokerType = realMoneyConfig?.brokerType || "MT5_MT4_BRIDGE";
 
   return (
     <header className="bg-slate-950 border-b border-slate-850 text-slate-100 sticky top-0 z-50 shadow-xl">
@@ -97,6 +103,29 @@ export const ForexHeader: React.FC<ForexHeaderProps> = ({
 
         {/* Protection Badges & Live Broker Trigger */}
         <div className="flex items-center space-x-2 shrink-0 text-[11px]">
+          {/* REAL MONEY BOT BUTTON */}
+          <button
+            type="button"
+            onClick={onOpenRealMoneyPanel}
+            className={`px-2.5 py-1 rounded font-mono font-bold flex items-center space-x-1.5 transition-all cursor-pointer border ${
+              isRealArmed
+                ? "bg-red-950 text-red-300 border-red-500 shadow-md shadow-red-500/40 animate-pulse"
+                : "bg-slate-900 text-amber-300 border-amber-500/50 hover:border-amber-400 hover:bg-slate-850"
+            }`}
+          >
+            {isRealArmed ? (
+              <>
+                <span className="w-2 h-2 rounded-full bg-red-400 animate-ping"></span>
+                <span>REAL MONEY: ARMED ({realBrokerType})</span>
+              </>
+            ) : (
+              <>
+                <Zap className="w-3 h-3 text-amber-400" />
+                <span>REAL MONEY BOT</span>
+              </>
+            )}
+          </button>
+
           <button
             onClick={onOpenBrokerModal}
             className={`px-2.5 py-1 rounded font-mono font-bold flex items-center space-x-1.5 transition-all cursor-pointer border ${

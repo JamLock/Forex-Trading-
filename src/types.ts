@@ -74,12 +74,55 @@ export interface PairMarketData {
 }
 
 export type StrategyMode =
+  | "MASTER_AI_COUNCIL_SYNTHESIS"
   | "INTELLIGENT_10M_SNIPER_005"
   | "PRO_5M_SCALP"
   | "PRO_10M_TREND"
   | "INSTITUTIONAL_CONFLUENCE"
   | "HIGH_PIP_RUNNER"
   | "TREND_SCALPER";
+
+export type MasterTraderId = "ICT" | "SIMONS" | "WYCKOFF" | "DRUCKENMILLER" | "TUDOR_JONES";
+
+export interface MasterTraderProfile {
+  id: MasterTraderId;
+  name: string;
+  title: string;
+  corePhilosophy: string;
+  bias: "BULLISH" | "BEARISH" | "NEUTRAL";
+  conviction: number;
+  setup: string;
+  weight: number;
+  recentWinRate: number;
+  guidance: string;
+  signatureConcepts: string[];
+}
+
+export interface MasterLearningLesson {
+  id: string;
+  epoch: number;
+  master: string;
+  title: string;
+  insight: string;
+  adjustment: string;
+  timestamp?: string;
+}
+
+export interface MasterCouncilConsensus {
+  overallBias: "STRONG_BUY" | "ACCUMULATE_LONG" | "NEUTRAL_WAIT" | "DISTRIBUTE_SHORT" | "STRONG_SELL";
+  consensusScore: number;
+  recommendedLotsMultiplier: number;
+  optimalSlPips: number;
+  optimalTp1Pips: number;
+  optimalTp2Pips: number;
+  optimalTp3Pips: number;
+  aiSynthesis: string;
+  learningEpoch: number;
+  lastOptimizedTime: string;
+  isAiOptimized: boolean;
+  masters: MasterTraderProfile[];
+  learnedLessons: MasterLearningLesson[];
+}
 
 export type ChartTimeframe = "30S" | "1M" | "5M" | "10M" | "15M" | "30M" | "1H" | "4H";
 
@@ -118,6 +161,14 @@ export interface BotSettings {
   trailingStopActive: boolean;
   minConfluenceScore: number; // 75%
   maxOpenPositions: number; // 3
+  masterWeights?: {
+    ict: number;
+    simons: number;
+    wyckoff: number;
+    druckenmiller: number;
+    tudorJones: number;
+  };
+  masterLearningActive?: boolean;
 }
 
 export interface AlgoSignal {
@@ -151,6 +202,61 @@ export interface AccountStats {
 }
 
 export type ExecutionEnvironment = "LIVE_BROKER" | "PAPER_LIVE_FEED";
+
+export type RealMoneyBrokerType =
+  | "METATRADER_5"
+  | "METATRADER_4"
+  | "OANDA_V20"
+  | "CTRADER"
+  | "PINECONNECTOR"
+  | "CUSTOM_WEBHOOK";
+
+export interface RealMoneyConfig {
+  isRealMoneyArmed: boolean;
+  brokerType: RealMoneyBrokerType;
+  brokerServer: string; // e.g., "ICMarketsSC-Live", "OANDA-v20-Live", "Pepperstone-Edge-01"
+  accountNumber: string;
+  apiKeyOrToken: string;
+  bridgeEndpointUrl: string; // e.g. "http://127.0.0.1:8080/trade" or "https://api-fxtrade.oanda.com"
+  bridgeSecret: string;
+  // Capital Protection Guardrails
+  maxDailyLossUsd: number;
+  maxRealLotCap: number;
+  maxOpenRealTrades: number;
+  maxSlippagePips: number;
+  spreadFilterPips: number;
+  newsFilterActive: boolean;
+  telegramTradeAlerts: boolean;
+  telegramBotToken: string;
+  telegramChatId: string;
+  connectionStatus: "CONNECTED" | "DISCONNECTED" | "CONNECTING" | "ERROR";
+  lastPingLatencyMs: number;
+  realAccountBalance?: number;
+  realAccountEquity?: number;
+  realAccountCurrency?: string;
+  realDailyLossToday: number;
+  killSwitchTriggered: boolean;
+  killSwitchReason?: string;
+}
+
+export interface RealMoneyOrderReceipt {
+  id: string;
+  timestamp: string;
+  brokerTicket: string | number;
+  pair: PairSymbol;
+  action: "BUY" | "SELL" | "CLOSE" | "BREAKEVEN_LOCK";
+  lots: number;
+  fillPrice: number;
+  slippagePips: number;
+  sl: number;
+  tp1: number;
+  tp2: number;
+  tp3: number;
+  broker: string;
+  latencyMs: number;
+  status: "FILLED" | "REJECTED" | "QUEUED";
+  executionMessage: string;
+}
 
 export interface BrokerBridgeConfig {
   environment: ExecutionEnvironment;

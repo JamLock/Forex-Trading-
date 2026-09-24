@@ -17,25 +17,26 @@ import {
   Zap,
 } from "lucide-react";
 import { BrokerBridgeConfig } from "../types";
-import { getMql5BridgeCode, getTradingViewPineScript } from "../utils/liveBrokerService";
+import { DEFAULT_BROKER_CONFIG, getMql5BridgeCode, getTradingViewPineScript } from "../utils/liveBrokerService";
 
 interface LiveBrokerModalProps {
   isOpen: boolean;
   onClose: () => void;
-  config: BrokerBridgeConfig;
-  setConfig: React.Dispatch<React.SetStateAction<BrokerBridgeConfig>>;
-  onTestDispatch: () => void;
-  onTestTelegram: () => void;
+  config?: BrokerBridgeConfig;
+  setConfig?: React.Dispatch<React.SetStateAction<BrokerBridgeConfig>>;
+  onTestDispatch?: () => void;
+  onTestTelegram?: () => void;
 }
 
 export const LiveBrokerModal: React.FC<LiveBrokerModalProps> = ({
   isOpen,
   onClose,
-  config,
-  setConfig,
-  onTestDispatch,
-  onTestTelegram,
+  config: propConfig,
+  setConfig = (_val: React.SetStateAction<BrokerBridgeConfig>) => {},
+  onTestDispatch = () => {},
+  onTestTelegram = () => {},
 }) => {
+  const config = { ...DEFAULT_BROKER_CONFIG, ...(propConfig || {}) };
   const [activeTab, setActiveTab] = useState<"BRIDGE_SETUP" | "MQL5_SCRIPT" | "TRADINGVIEW">("BRIDGE_SETUP");
   const [copiedCode, setCopiedCode] = useState(false);
 

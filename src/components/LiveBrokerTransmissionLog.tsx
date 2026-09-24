@@ -11,10 +11,11 @@ import {
   ExternalLink,
 } from "lucide-react";
 import { BrokerBridgeConfig, LiveBrokerPacket } from "../types";
+import { DEFAULT_BROKER_CONFIG } from "../utils/liveBrokerService";
 
 interface LiveBrokerTransmissionLogProps {
   packets: LiveBrokerPacket[];
-  config: BrokerBridgeConfig;
+  config?: BrokerBridgeConfig;
   onOpenModal: () => void;
   onSyncRealRates: () => void;
   isSyncing: boolean;
@@ -22,13 +23,14 @@ interface LiveBrokerTransmissionLogProps {
 }
 
 export const LiveBrokerTransmissionLog: React.FC<LiveBrokerTransmissionLogProps> = ({
-  packets,
-  config,
+  packets = [],
+  config: propConfig,
   onOpenModal,
   onSyncRealRates,
   isSyncing,
   rateSource,
 }) => {
+  const config = { ...DEFAULT_BROKER_CONFIG, ...(propConfig || {}) };
   return (
     <div className="bg-slate-900 border border-slate-800 rounded-2xl p-4 shadow-xl space-y-3 font-mono text-xs">
       <div className="flex flex-wrap items-center justify-between gap-2 border-b border-slate-800 pb-2.5">
